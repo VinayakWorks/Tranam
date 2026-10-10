@@ -15,31 +15,81 @@ Students and early-career job seekers can encounter fake internship offers, frau
 - Explain potential warning signs in accessible language.
 - Encourage safer application and verification practices.
 
-## Current frontend demo
+## Current application
 
 The static HTML/CSS/JavaScript demo currently includes:
 
-- Offer text analysis with a detailed, downloadable HTML verification report.
+- A FastAPI backend (`backend/`) for offer text analysis and a detailed verification report.
 - Risk estimate, matched warning signs with text evidence, severity breakdown, checklist, and recommendations.
-- Local PDF, TXT, and Markdown text extraction. PDF text extraction uses the pinned PDF.js 6.4.299 CDN build; the offer contents are processed in the browser and are not sent to that CDN.
-- A clear OCR-required notice when a PDF has no selectable text, as with many scanned documents.
+- Local PDF, TXT, and Markdown text extraction, plus browser-based OCR for scanned PDFs and JPG/JPEG, PNG, WEBP, BMP, and GIF images/screenshots.
+- PDF.js 6.4.299 and Tesseract.js 6.0.1 are loaded from pinned CDN URLs. Their libraries/language data are downloaded, but selected offer files are processed locally and are not sent to those CDNs.
 - Browser print and “Save as PDF” actions, clipboard summary, and verification history saved in the current browser.
 - Quick Chat, safety guidance, and responsive navigation.
+- Student registration, sign-in, profile editing, and revocable 24-hour sessions backed by SQLite; password hashes use salted PBKDF2, and bearer tokens are kept in the current browser tab session.
+- Optional, separately consented report storage for signed-in users, with private account history, viewing, and deletion. Browser-local history remains available independently.
+- An opportunities page linking to LinkedIn, Internshala, Indeed, Naukri, Wellfound, and India's National Career Service. Listings are hosted externally and are not verified by Trāṇam.
 
-Open `index.html` in a modern browser to try the frontend. PDF extraction requires an internet connection to load the PDF.js library and worker. TXT/MD extraction and pasted-text analysis do not require a backend.
+### Run locally on Windows
+
+Use two PowerShell terminals from the repository root.
+
+**Terminal 1 — backend**
+
+```powershell
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+**Terminal 2 — frontend**
+
+```powershell
+py -m http.server 5500
+```
+
+Open `http://127.0.0.1:5500` in a browser. The analyzer and Quick Chat send text to the backend only after the corresponding consent checkbox is selected. Analysis does not persist the full submitted offer text. If a signed-in user separately selects **Save this report to my account**, Trāṇam stores the generated report, including matched evidence excerpts and the optional company details, in the local SQLite database. The original uploaded file is never stored. Saved reports stay with the account until deleted individually; local browser history is separate and can be cleared on the device. PDF extraction and OCR require an internet connection to load the pinned PDF.js/Tesseract.js libraries and English OCR language data. The original selected file stays in the browser; only extracted text is sent to the configured Trāṇam backend after consent.
+
+The backend reads local settings from `backend/.env`; safe development defaults are included. Copy `backend/.env.example` to create or reset that file. Account profiles and hashed credentials are stored in `backend/tranam.sqlite3` by default; this local database is ignored by Git. Set `CORS_ORIGINS` to the exact frontend origin(s) when using a different host or port. The API binds to `127.0.0.1` by default.
+
+The account demo uses salted PBKDF2 password hashes and expiring, revocable bearer sessions. It does not yet include email verification, password reset, MFA, account deletion, or production-grade rate limiting; use a unique password and do not expose the local API publicly as-is. Browser history remains local to the device; only reports explicitly saved by a signed-in user are linked to that account.
+
+API endpoints:
+
+- `GET http://127.0.0.1:8000/api/health`
+- `POST http://127.0.0.1:8000/api/analyze`
+- `POST http://127.0.0.1:8000/api/auth/register`
+- `POST http://127.0.0.1:8000/api/auth/login`
+- `GET http://127.0.0.1:8000/api/auth/me`
+- `PATCH http://127.0.0.1:8000/api/auth/profile`
+- `POST http://127.0.0.1:8000/api/auth/logout`
+- `GET http://127.0.0.1:8000/api/reports` (authenticated; optional `limit` from 1 to 100)
+- `DELETE http://127.0.0.1:8000/api/reports/{report_reference}` (authenticated and owner-scoped)
+- Interactive API docs: `http://127.0.0.1:8000/docs`
+
+To persist an analysis, send `save_report: true` in `POST /api/analyze` and include the signed-in user's `Authorization: Bearer <token>` header. Omitting the flag returns an analysis without storing it; requesting persistence without a valid account session is rejected. Report listing and deletion are scoped to the authenticated account. A saved report contains the assessment and its evidence excerpts, not the complete pasted offer or uploaded file. There is no bulk-delete or account-deletion endpoint in this demo yet.
+
+Run backend unit tests from `backend/` with:
+
+```powershell
+py -m unittest discover -s tests -v
+```
 
 ### Important limitations
 
 - The score is a rule-based estimate, not a statistically validated probability or a finding of fraud.
 - Company registration, recruiter identity, websites, email ownership, live URLs, and offer-letter authenticity are not independently verified.
-- A scanned PDF needs OCR. The demo does not run OCR itself.
-- Verification history is local to the browser/device and is not synced.
-- PDF.js is loaded from cdnjs; offer documents are not uploaded to the CDN.
+- OCR recognizes English only and may misread low-quality, rotated, or handwritten text; review extracted text before analysis. Scanned PDFs are limited to 30 pages per file.
+- Old Word `.doc`, Word `.docx`, spreadsheets, video, and other unsupported formats are not accepted. Save/export those as PDF or paste the relevant text.
+- Browser-local history is not synced; account-saved reports are separate and require explicit consent.
+- Reports saved to an account persist in the local SQLite database until individually deleted. The demo has no account deletion or retention-expiry feature.
+- PDF.js is loaded from jsDelivr; offer documents are not uploaded to the CDN.
 
 ## How to use
 
-1. Open `index.html` in a modern browser.
-2. Choose **Check Internship**, then paste offer details or upload a PDF, TXT, or MD file.
+1. Start the backend and frontend using the local setup instructions above.
+2. Choose **Check Internship**, then paste offer details or upload a PDF, TXT, MD, or supported image/screenshot. Scanned PDFs and images are OCR-processed in the browser.
 3. Select **Analyze internship** and review the generated report, evidence, checklist statuses, and recommended actions.
 4. Download the print-ready HTML report, print it, or use the browser’s print dialog to save a PDF.
 
@@ -60,11 +110,11 @@ Sample text with fewer matching warning signs:
 
 ## Technology
 
-The current demo uses semantic HTML, CSS, and browser JavaScript. It does not require a backend or database. PDF text extraction is provided by PDF.js 6.4.299 loaded from jsDelivr.
+The frontend uses semantic HTML, CSS, and browser JavaScript. The backend uses FastAPI, Uvicorn, Pydantic, python-dotenv, and SQLite. PDF text extraction is provided by PDF.js 6.4.299 loaded from jsDelivr. No external AI service is configured.
 
 ## Project status
 
-**In development.** The frontend provides an indicative text-based assessment; external verification and backend-supported features remain future work.
+**In development.** The frontend, local FastAPI analysis flow, basic student accounts, and opt-in account report history are functional. Email verification, password recovery, MFA, account deletion, production-grade rate limiting, external company/recruiter verification, and live URL scanning remain future work.
 
 ## Future scope
 

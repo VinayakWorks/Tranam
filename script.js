@@ -1,9 +1,15 @@
 const HISTORY_KEY = "tranam-check-history";
+const ACCOUNT_TOKEN_KEY = "tranam-account-token";
 const MAX_HISTORY_ITEMS = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MIN_OFFER_LENGTH = 20;
 const PDFJS_BASE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build";
+const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.esm.min.js";
+const MAX_PDF_PAGES = 30;
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
+const API_BASE_URL = window.TRANAM_API_BASE_URL || "http://127.0.0.1:8000";
 let pdfjsPromise = null;
+let tesseractPromise = null;
 
 const offerText = document.getElementById("offerText");
 const analyzerForm = document.getElementById("analyzerForm");
@@ -18,6 +24,10 @@ const historyList = document.getElementById("historyList");
 const historyEmpty = document.getElementById("historyEmpty");
 const historyStatus = document.getElementById("historyStatus");
 const clearHistoryButton = document.getElementById("clearHistory");
+const savedReportList = document.getElementById("savedReportList");
+const savedHistoryStatus = document.getElementById("savedHistoryStatus");
+const savedReportsEmpty = document.getElementById("savedReportsEmpty");
+const refreshSavedReportsButton = document.getElementById("refreshSavedReports");
 
 const indicators = [
   {
@@ -126,7 +136,9 @@ const viewTitles = {
   check: "Check an Internship — Trāṇam",
   chat: "Quick Chat — Trāṇam",
   history: "Verification History — Trāṇam",
-  safety: "About & Safety — Trāṇam"
+  safety: "About & Safety — Trāṇam",
+  opportunities: "Find Opportunities — Trāṇam",
+  account: "Student Profile — Trāṇam"
 };
 
 function getRiskLevel(score) {
@@ -257,6 +269,7 @@ function readHistory() {
 function renderHistory() {
   const history = readHistory();
   historyList.replaceChildren();
+  loadSavedReports();
 
   if (history === null) {
     historyStatus.textContent = "History could not be loaded from this browser.";
@@ -288,7 +301,97 @@ function renderHistory() {
     item.append(details, score);
     historyList.appendChild(item);
   });
+
 }
+
+function renderSavedReports(reports) {
+  savedReportList.replaceChildren();
+  savedReportsEmpty.hidden = reports.length > 0;
+  savedHistoryStatus.textContent = reports.length
+    ? `${reports.length} saved account report${reports.length === 1 ? "" : "s"}.`
+    : "No reports have been saved to this account yet.";
+
+  reports.forEach(({ report_reference: reference, saved_at: savedAt, report }) => {
+    const item = document.createElement("li");
+    item.className = "history-item saved-report-item";
+
+    const details = document.createElement("span");
+    const name = document.createElement("strong");
+    const date = document.createElement("small");
+    name.textContent = report.company_name || report.source_filename || reference;
+    date.textContent = `${reference} · Saved ${new Date(savedAt).toLocaleString()}`;
+    details.append(name, date);
+
+    const actions = document.createElement("span");
+    actions.className = "saved-report-actions";
+    const score = document.createElement("span");
+    score.className = `history-score ${report.classification.key}`;
+    score.textContent = `${report.score}/100 · ${report.classification.label}`;
+    const viewButton = document.createElement("button");
+    viewButton.className = "text-button";
+    viewButton.type = "button";
+    viewButton.textContent = "View";
+    viewButton.addEventListener("click", () => showSavedReport(report));
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "text-button delete-saved-report";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteSavedReport(reference));
+    actions.append(score, viewButton, deleteButton);
+    item.append(details, actions);
+    savedReportList.appendChild(item);
+  });
+}
+
+async function loadSavedReports() {
+  savedReportList.replaceChildren();
+  if (!accountAccessToken) {
+    savedHistoryStatus.textContent = "Sign in to view reports saved to your account.";
+    savedReportsEmpty.hidden = true;
+    refreshSavedReportsButton.hidden = true;
+    return;
+  }
+
+  refreshSavedReportsButton.hidden = false;
+  savedHistoryStatus.textContent = "Loading saved reports…";
+  savedReportsEmpty.hidden = true;
+  try {
+    const payload = await accountRequest("/api/reports?limit=50");
+    renderSavedReports(payload.reports);
+  } catch (error) {
+    console.error("Unable to load saved reports.", error);
+    savedHistoryStatus.textContent = error.status === 401
+      ? "Your session expired. Sign in again to view account reports."
+      : "Saved reports could not be loaded. Check the backend connection and retry.";
+    savedReportsEmpty.hidden = true;
+  }
+}
+
+function showSavedReport(report) {
+  currentReport = renderReport(report);
+  analyzerForm.hidden = true;
+  reportView.hidden = false;
+  window.location.hash = "check";
+  setView("check", false);
+  reportView.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("reportTitle").focus({ preventScroll: true });
+}
+
+async function deleteSavedReport(reference) {
+  if (!window.confirm(`Delete saved report ${reference}? This cannot be undone.`)) return;
+  savedHistoryStatus.textContent = "Deleting saved report…";
+  try {
+    await accountRequest(`/api/reports/${encodeURIComponent(reference)}`, { method: "DELETE" });
+    await loadSavedReports();
+  } catch (error) {
+    console.error("Unable to delete the saved report.", error);
+    savedHistoryStatus.textContent = error.status === 404
+      ? "That saved report was not found."
+      : "The report could not be deleted. Check the backend connection and retry.";
+  }
+}
+
+refreshSavedReportsButton.addEventListener("click", loadSavedReports);
 
 function saveHistory(name, score, risk) {
   const history = readHistory();
@@ -493,33 +596,31 @@ function renderFindings(matches) {
   });
 }
 
-function renderReport(text, companyName, companyLink, sourceName) {
-  const analysisInput = [companyLink, text].filter(Boolean).join("\n");
-  const analysis = scanText(analysisInput, companyName);
-  const generatedAt = new Date();
-  const checklist = makeChecklist(analysis.matches, analysisInput, companyName, companyLink);
-  const recommendations = getRecommendations(analysis.matches, analysis.score);
+function renderReport(analysis) {
+  const generatedAt = new Date(analysis.generated_at);
+  const classification = analysis.classification;
   const severityCounts = ["Critical", "High", "Medium", "Low"].map((severity) => ({
     severity,
-    count: analysis.matches.filter((match) => match.severity === severity).length
+    count: analysis.severity_counts[severity.toLowerCase()] || 0
   }));
 
-  document.getElementById("reportReference").textContent = createReportReference(generatedAt);
+  document.getElementById("reportReference").textContent = analysis.report_reference;
   document.getElementById("reportGenerated").textContent = generatedAt.toLocaleString();
-  document.getElementById("reportSource").textContent = sourceName || "Pasted offer text";
-  document.getElementById("reportAnalysisStatus").textContent = "Completed locally in this browser";
+  document.getElementById("reportSource").textContent = analysis.source_filename;
+  document.getElementById("reportAnalysisStatus").textContent = analysis.analysis_status;
+  document.getElementById("reportStorageNote").textContent = analysis.saved_to_account
+    ? "This report and its evidence excerpts are saved to your Trāṇam account. The original uploaded file is not stored."
+    : "Generated in your browser. This report was not saved to the backend.";
   document.getElementById("reportScore").textContent = String(analysis.score);
   document.getElementById("reportRiskMeter").setAttribute("aria-valuenow", String(analysis.score));
   document.getElementById("reportRiskMeter").style.setProperty("--score", `${analysis.score}%`);
-  document.getElementById("reportRiskPanel").dataset.risk = analysis.risk.key;
-  document.getElementById("reportRiskTitle").textContent = `${analysis.risk.title} risk`;
-  document.getElementById("reportRiskSummary").textContent = analysis.matches.length
-    ? `${analysis.matches.length} warning indicator${analysis.matches.length === 1 ? "" : "s"} were detected from the submitted text and missing details. ${analysis.risk.description}`
-    : analysis.risk.description;
-  document.getElementById("warningCount").textContent = String(analysis.matches.length);
-  document.getElementById("checksCount").textContent = String(analysis.checksPerformed);
-  document.getElementById("notCheckedCount").textContent = String(checklist.filter((item) => item.status === "not-checked").length);
-  document.getElementById("findingTotal").textContent = `${analysis.matches.length} finding${analysis.matches.length === 1 ? "" : "s"}`;
+  document.getElementById("reportRiskPanel").dataset.risk = classification.key;
+  document.getElementById("reportRiskTitle").textContent = `${classification.label} risk`;
+  document.getElementById("reportRiskSummary").textContent = analysis.summary;
+  document.getElementById("warningCount").textContent = String(analysis.warning_count);
+  document.getElementById("checksCount").textContent = String(analysis.checks_performed);
+  document.getElementById("notCheckedCount").textContent = String(analysis.external_checks_not_performed);
+  document.getElementById("findingTotal").textContent = `${analysis.warning_count} finding${analysis.warning_count === 1 ? "" : "s"}`;
 
   const breakdown = document.getElementById("severityBreakdown");
   breakdown.replaceChildren();
@@ -535,43 +636,94 @@ function renderReport(text, companyName, companyLink, sourceName) {
   });
 
   renderFindings(analysis.matches);
-  renderChecklist(checklist);
+  renderChecklist(analysis.checklist);
   document.getElementById("whyFlagged").textContent = analysis.matches.length
-    ? `The scanner found ${analysis.matches.length} pattern${analysis.matches.length === 1 ? "" : "s"} or missing-information signal${analysis.matches.length === 1 ? "" : "s"} that may warrant follow-up. These are indicators to review, not a conclusion about the company.`
+    ? `The scanner found ${analysis.warning_count} pattern${analysis.warning_count === 1 ? "" : "s"} or missing-information signal${analysis.warning_count === 1 ? "" : "s"} that may warrant follow-up. These are indicators to review, not a conclusion about the company.`
     : "No configured warning patterns matched the submitted text. The offer and employer have not been independently checked.";
   addListItems(document.getElementById("flagExplanationList"), analysis.matches.map((match) => `${match.name}: ${match.why}`));
-  addListItems(document.getElementById("reportRecommendations"), recommendations);
+  addListItems(document.getElementById("reportRecommendations"), analysis.recommendations);
 
-  const missingItems = checklist.filter((item) =>
+  const missingItems = analysis.checklist.filter((item) =>
     item.status === "not-checked" || item.status === "warning"
   );
   document.getElementById("missingInfoText").textContent = missingItems.length
     ? `${missingItems.map((item) => item.name).join(", ")} require independent follow-up. Trāṇam did not check company records, recruiter identity, official websites, live link safety, or document authenticity.`
     : "No external checks were performed. Trāṇam did not check company records, recruiter identity, official websites, live link safety, or document authenticity.";
 
-  currentReport = {
+  return {
     matches: analysis.matches,
     score: analysis.score,
-    risk: analysis.risk,
-    recommendations,
+    risk: classification,
+    recommendations: analysis.recommendations,
     generatedAt,
-    reference: document.getElementById("reportReference").textContent,
-    sourceName: sourceName || "Pasted offer text",
-    companyName
+    reference: analysis.report_reference,
+    sourceName: analysis.source_filename,
+    companyName: analysis.company_name || ""
   };
-
-  return currentReport;
 }
 
 let currentReport = null;
 
-function analyzeOffer(text, companyName, companyLink, sourceName) {
-  const report = renderReport(text, companyName, companyLink, sourceName);
-  analyzerForm.hidden = true;
-  reportView.hidden = false;
-  saveHistory(companyName || sourceName || "Internship offer", report.score, report.risk.key);
-  reportView.scrollIntoView({ behavior: "smooth", block: "start" });
-  document.getElementById("reportTitle").focus({ preventScroll: true });
+async function analyzeOffer(text, companyName, companyLink, sourceName) {
+  const submitButton = document.getElementById("analyzeBtn");
+  const shouldSaveReport = document.getElementById("saveReportConsent").checked;
+  if (shouldSaveReport && !accountAccessToken) {
+    setError("Sign in from the Login link before saving a report to your account.");
+    return;
+  }
+  submitButton.disabled = true;
+  submitButton.textContent = "Analyzing…";
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (shouldSaveReport) headers.Authorization = `Bearer ${accountAccessToken}`;
+    const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        offer_text: text,
+        company_name: companyName,
+        company_link: companyLink,
+        source_filename: sourceName,
+        save_report: shouldSaveReport
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      const detail = typeof payload.detail === "string"
+        ? payload.detail
+        : "The backend rejected this analysis request.";
+      const error = new Error(detail);
+      error.status = response.status;
+      throw error;
+    }
+
+    currentReport = renderReport(payload);
+    analyzerForm.hidden = true;
+    reportView.hidden = false;
+    saveHistory(companyName || sourceName || "Internship offer", currentReport.score, currentReport.risk.key);
+    if (payload.saved_to_account) {
+      document.getElementById("reportActionStatus").textContent = "Report saved securely to your account.";
+      loadSavedReports();
+    }
+    reportView.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("reportTitle").focus({ preventScroll: true });
+  } catch (error) {
+    console.error("Internship analysis request failed.", error);
+    if (error.status === 401 && shouldSaveReport) {
+      clearAccountSession("Your session expired. Sign in again before saving a report.");
+    }
+    setError(
+      error.status === 401
+        ? "Your session expired. Sign in again, then analyze and save the report."
+        : error instanceof TypeError
+        ? "Could not connect to the Trāṇam backend. Start the backend and check that the API is available at http://127.0.0.1:8000."
+        : error.message
+    );
+  } finally {
+    submitButton.disabled = false;
+    submitButton.innerHTML = 'Analyze internship <span aria-hidden="true">↗</span>';
+  }
 }
 
 function getReportSummary() {
@@ -707,6 +859,9 @@ function setView(viewName, scroll = true) {
 
   document.title = viewTitles[knownView];
   if (knownView === "history") renderHistory();
+  if (knownView === "account" && !accountProfile && !accountAccessToken) {
+    showAccountForm("login");
+  }
 
   if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -728,6 +883,246 @@ function syncViewWithHash() {
 
 let selectedSourceName = "";
 
+let accountAccessToken = sessionStorage.getItem(ACCOUNT_TOKEN_KEY) || "";
+let accountProfile = null;
+
+function setAccountStatus(message, isError = false) {
+  const status = document.getElementById("accountStatus");
+  status.textContent = message;
+  status.classList.toggle("is-error", isError);
+}
+
+function showAccountForm(formName) {
+  const isRegister = formName === "register";
+  document.getElementById("loginForm").hidden = isRegister;
+  document.getElementById("registerForm").hidden = !isRegister;
+  document.getElementById("loginTab").setAttribute("aria-selected", String(!isRegister));
+  document.getElementById("registerTab").setAttribute("aria-selected", String(isRegister));
+  setAccountStatus("");
+}
+
+function renderAccountProfile(profile) {
+  accountProfile = profile;
+  document.getElementById("authPanel").hidden = true;
+  document.getElementById("profilePanel").hidden = false;
+  document.getElementById("accountNavLink").textContent = "Profile";
+  document.getElementById("profileGreeting").textContent = `Hello, ${profile.display_name}`;
+  document.getElementById("profileEmail").textContent = profile.email;
+  document.getElementById("profileAvatar").textContent = profile.display_name.trim().charAt(0).toUpperCase() || "T";
+  document.getElementById("profileName").value = profile.display_name;
+  document.getElementById("profileCollege").value = profile.college;
+  document.getElementById("profileCourse").value = profile.course;
+  document.getElementById("profileInterests").value = profile.interests;
+}
+
+function renderSignedOut() {
+  accountProfile = null;
+  document.getElementById("authPanel").hidden = false;
+  document.getElementById("profilePanel").hidden = true;
+  document.getElementById("accountNavLink").textContent = "Login";
+  showAccountForm("login");
+}
+
+async function accountRequest(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (options.body) headers.set("Content-Type", "application/json");
+  if (accountAccessToken) headers.set("Authorization", `Bearer ${accountAccessToken}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const payload = await response.json();
+  if (!response.ok) {
+    const detail = Array.isArray(payload.detail)
+      ? payload.detail.map((item) => item.msg).join(" ")
+      : payload.detail;
+    const error = new Error(typeof detail === "string" ? detail : "The account request could not be completed.");
+    error.status = response.status;
+    if (response.status === 401 && accountAccessToken && !path.endsWith("/login")) {
+      clearAccountSession("Your session expired. Sign in again.");
+    }
+    throw error;
+  }
+  return payload;
+}
+
+function clearAccountSession(message) {
+  accountAccessToken = "";
+  try {
+    sessionStorage.removeItem(ACCOUNT_TOKEN_KEY);
+  } catch (error) {
+    console.error("Unable to clear the expired account session from this browser.", error);
+  }
+  renderSignedOut();
+  setAccountStatus(message, true);
+}
+
+function saveAccountSession(payload) {
+  accountAccessToken = payload.access_token;
+  sessionStorage.setItem(ACCOUNT_TOKEN_KEY, accountAccessToken);
+  renderAccountProfile(payload.profile);
+  setAccountStatus("You are signed in. Your profile is saved in this backend.");
+}
+
+async function restoreAccountSession() {
+  if (!accountAccessToken) {
+    renderSignedOut();
+    return;
+  }
+
+  try {
+    const payload = await accountRequest("/api/auth/me");
+    renderAccountProfile(payload.profile);
+  } catch (error) {
+    console.error("Unable to restore the account session.", error);
+    if (error.status === 401) {
+      accountAccessToken = "";
+      sessionStorage.removeItem(ACCOUNT_TOKEN_KEY);
+      renderSignedOut();
+      setAccountStatus("Your session expired. Sign in again.", true);
+    } else {
+      setAccountStatus("Could not connect to the account service. Start the backend and retry.", true);
+    }
+  }
+}
+
+document.getElementById("loginTab").addEventListener("click", () => showAccountForm("login"));
+document.getElementById("registerTab").addEventListener("click", () => showAccountForm("register"));
+
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const button = formElement.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setAccountStatus("Signing in…");
+  try {
+    saveAccountSession(await accountRequest("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: form.get("email"),
+        password: form.get("password")
+      })
+    }));
+    formElement.reset();
+  } catch (error) {
+    console.error("Account sign-in failed.", error);
+    setAccountStatus(error instanceof TypeError
+      ? "Could not connect to the account service. Start the backend and try again."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("registerForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const button = formElement.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setAccountStatus("Creating your account…");
+  try {
+    saveAccountSession(await accountRequest("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: form.get("display_name"),
+        email: form.get("email"),
+        password: form.get("password"),
+        college: form.get("college"),
+        course: form.get("course"),
+        interests: form.get("interests")
+      })
+    }));
+    formElement.reset();
+  } catch (error) {
+    console.error("Account registration failed.", error);
+    setAccountStatus(error instanceof TypeError
+      ? "Could not connect to the account service. Start the backend and try again."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("profilePanel").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setAccountStatus("Saving profile…");
+  try {
+    const payload = await accountRequest("/api/auth/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        display_name: form.get("display_name"),
+        college: form.get("college"),
+        course: form.get("course"),
+        interests: form.get("interests")
+      })
+    });
+    renderAccountProfile(payload.profile);
+    setAccountStatus("Your profile has been updated.");
+  } catch (error) {
+    console.error("Profile update failed.", error);
+    setAccountStatus(error instanceof TypeError
+      ? "Could not connect to the account service. Start the backend and try again."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("logoutButton").addEventListener("click", async () => {
+  let logoutMessage = "You have signed out.";
+  let logoutFailed = false;
+  try {
+    await accountRequest("/api/auth/logout", { method: "POST" });
+  } catch (error) {
+    console.error("Server-side sign-out failed.", error);
+    logoutMessage = "Signed out on this device; the server could not confirm token revocation.";
+    logoutFailed = true;
+  } finally {
+    accountAccessToken = "";
+    sessionStorage.removeItem(ACCOUNT_TOKEN_KEY);
+    renderSignedOut();
+    setAccountStatus(logoutMessage, logoutFailed);
+  }
+});
+
+async function createOcrWorker(onProgress) {
+  if (!tesseractPromise) {
+    tesseractPromise = import(TESSERACT_URL).catch((error) => {
+      tesseractPromise = null;
+      console.error("Unable to load the browser OCR library.", error);
+      throw new Error("OCR could not load. Connect to the internet or paste the offer text instead.");
+    });
+  }
+
+  const tesseract = await tesseractPromise;
+  const createWorker = tesseract.createWorker || tesseract.default?.createWorker;
+  if (!createWorker) {
+    throw new Error("The browser OCR library loaded without its required worker support.");
+  }
+  return createWorker("eng", 1, {
+    logger: ({ status, progress }) => {
+      if (status === "recognizing text") {
+        onProgress(`Reading text in your browser… ${Math.round(progress * 100)}%`);
+      } else if (status) {
+        onProgress(`Preparing browser OCR: ${status}…`);
+      }
+    }
+  });
+}
+
+async function recognizeImageText(image, onProgress) {
+  const worker = await createOcrWorker(onProgress);
+  try {
+    const result = await worker.recognize(image);
+    return result.data.text.trim();
+  } finally {
+    await worker.terminate();
+  }
+}
+
 async function extractPdfText(file) {
   if (!pdfjsPromise) {
     pdfjsPromise = import(`${PDFJS_BASE_URL}/pdf.min.mjs`).catch((error) => {
@@ -744,6 +1139,9 @@ async function extractPdfText(file) {
   });
   try {
     const pdfDocument = await documentTask.promise;
+    if (pdfDocument.numPages > MAX_PDF_PAGES) {
+      throw new Error(`This PDF has more than ${MAX_PDF_PAGES} pages. Split it into smaller files or paste the relevant offer text.`);
+    }
     const pages = [];
 
     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
@@ -756,11 +1154,43 @@ async function extractPdfText(file) {
       pages.push(pageText);
     }
 
-    const text = pages.join("\n").trim();
-    if (!text) {
-      throw new Error("No selectable text was found in this PDF. It may be a scanned document; OCR is required. You can paste text extracted with a trusted OCR tool.");
+    if (pages.some((pageText) => !pageText.trim())) {
+      fileNote.textContent = "Some PDF pages have no selectable text. Starting browser-based English OCR…";
+      const worker = await createOcrWorker((message) => {
+        fileNote.textContent = message;
+      });
+      try {
+        for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+          if (pages[pageIndex].trim()) continue;
+          const pageNumber = pageIndex + 1;
+          fileNote.textContent = `Reading scanned PDF page ${pageNumber} of ${pdfDocument.numPages}…`;
+          const page = await pdfDocument.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          const context = canvas.getContext("2d");
+          if (!context) {
+            throw new Error("Your browser could not prepare a PDF page for OCR.");
+          }
+          try {
+            await page.render({ canvasContext: context, viewport }).promise;
+            const result = await worker.recognize(canvas);
+            pages[pageIndex] = result.data.text;
+          } finally {
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+        }
+      } finally {
+        await worker.terminate();
+      }
     }
 
+    const text = pages.join("\n").trim();
+    if (!text) {
+      throw new Error("No readable text was found in this PDF. You can paste the offer text or use a trusted OCR tool.");
+    }
     return text;
   } finally {
     await documentTask.destroy();
@@ -769,8 +1199,8 @@ async function extractPdfText(file) {
 
 async function loadTextFile(file) {
   const extension = file.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase();
-  if (!["pdf", "txt", "md"].includes(extension)) {
-    setError("Please choose a PDF, TXT, or MD file.");
+  if (!["pdf", "txt", "md"].includes(extension) && !IMAGE_EXTENSIONS.has(extension)) {
+    setError("Choose a PDF, JPG/JPEG, PNG, WEBP, BMP, GIF, TXT, or MD file.");
     return;
   }
 
@@ -789,27 +1219,36 @@ async function loadTextFile(file) {
   updateCharacterCount();
 
   try {
-    const extractedText = extension === "pdf"
-      ? await extractPdfText(file)
-      : await file.text();
+    let extractedText;
+    if (extension === "pdf") {
+      extractedText = await extractPdfText(file);
+    } else if (IMAGE_EXTENSIONS.has(extension)) {
+      fileNote.textContent = "Starting browser-based English OCR… The image stays on this device.";
+      extractedText = await recognizeImageText(file, (message) => {
+        fileNote.textContent = message;
+      });
+      if (!extractedText) {
+        throw new Error("No readable text was found in this image. Try a clearer screenshot or paste the offer text.");
+      }
+    } else {
+      extractedText = await file.text();
+    }
 
     offerText.value = extractedText;
     selectedSourceName = file.name;
     fileName.textContent = `Added: ${file.name}`;
     fileNote.textContent = extension === "pdf"
-      ? "Selectable PDF text extracted locally. Extraction does not verify document authenticity."
-      : "File content loaded locally. The filename is not used as analysis evidence.";
+      ? "PDF text extracted in your browser. Extraction does not verify document authenticity."
+      : IMAGE_EXTENSIONS.has(extension)
+        ? "English OCR text extracted in your browser. Check it for recognition mistakes before analysis."
+        : "File text loaded locally. The filename is not used as analysis evidence.";
     updateCharacterCount();
     errorMessage.hidden = true;
     reportView.hidden = true;
     analyzerForm.hidden = false;
   } catch (error) {
-    if (extension !== "pdf" || !error.message.includes("OCR is required")) {
-      console.error("Unable to extract text from the selected file.", error);
-    }
-    fileNote.textContent = extension === "pdf" && error.message.includes("OCR is required")
-      ? "Scanned PDF detected or no selectable text found. OCR is required to analyze this document."
-      : "";
+    console.error("Unable to extract text from the selected file.", error);
+    fileNote.textContent = "";
     setError(error.message || "The selected file could not be read. Please try another file.");
   }
 }
@@ -875,7 +1314,7 @@ dropZone.addEventListener("drop", (event) => {
   if (file) loadTextFile(file);
 });
 
-document.getElementById("chatForm").addEventListener("submit", (event) => {
+document.getElementById("chatForm").addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const chatInput = document.getElementById("chatInput");
@@ -888,23 +1327,35 @@ document.getElementById("chatForm").addEventListener("submit", (event) => {
   userBubble.textContent = message;
   chatMessages.appendChild(userBubble);
   chatInput.value = "";
-
-  const { matches, score, risk } = scanText(message);
-  let reply = `${risk.title} (${score}% estimated). ${risk.description}`;
-
-  if (matches.length) {
-    reply += `\n\nPatterns to review: ${matches.map((item) => item.name).join(", ")}.`;
-    reply += `\n\n${getRecommendations(matches, score)[0]}`;
-  } else {
-    reply += "\n\nNo matching warning signs appeared in this quick scan. Verify the employer independently; no match does not guarantee an offer is safe.";
-  }
-
   const assistantBubble = document.createElement("div");
   assistantBubble.className = "chat-bubble assistant-bubble";
-  assistantBubble.textContent = reply;
+  assistantBubble.textContent = "Checking the submitted details…";
   chatMessages.appendChild(assistantBubble);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-  saveHistory("Quick chat", score, risk.key);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offer_text: message, source_filename: "Quick chat" })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(typeof payload.detail === "string" ? payload.detail : "The backend rejected this message.");
+    }
+
+    const findings = payload.matches.length
+      ? `Patterns to review: ${payload.matches.map((match) => match.name).join(", ")}.`
+      : "No configured warning patterns matched. This does not guarantee that the offer is safe.";
+    assistantBubble.textContent = `${payload.classification.label} risk (${payload.score}/100). ${payload.summary}\n\n${findings}\n\n${payload.recommendations[0] || "Verify the employer independently."}`;
+    saveHistory("Quick chat", payload.score, payload.classification.key);
+  } catch (error) {
+    console.error("Quick chat analysis request failed.", error);
+    assistantBubble.textContent = error instanceof TypeError
+      ? "Could not connect to the Trāṇam backend. Start the backend and try again."
+      : error.message;
+  }
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 });
 
 clearHistoryButton.addEventListener("click", () => {
@@ -921,3 +1372,4 @@ window.addEventListener("hashchange", syncViewWithHash);
 document.getElementById("currentYear").textContent = new Date().getFullYear();
 updateCharacterCount();
 setView(window.location.hash.slice(1) || "home", false);
+restoreAccountSession();
