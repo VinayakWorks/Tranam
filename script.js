@@ -138,8 +138,9 @@ const viewTitles = {
   history: "Verification History — Trāṇam",
   safety: "About & Safety — Trāṇam",
   opportunities: "Find Opportunities — Trāṇam",
-  account: "Student Profile — Trāṇam"
+  account: "Account & Profile — Trāṇam"
 };
+const accountRequiredViews = new Set(["check", "chat", "history", "opportunities"]);
 
 function getRiskLevel(score) {
   if (score >= 70) {
@@ -362,7 +363,7 @@ async function loadSavedReports() {
     console.error("Unable to load saved reports.", error);
     savedHistoryStatus.textContent = error.status === 401
       ? "Your session expired. Sign in again to view account reports."
-      : "Saved reports could not be loaded. Check the backend connection and retry.";
+      : "Saved reports are unavailable right now. Please try again shortly.";
     savedReportsEmpty.hidden = true;
   }
 }
@@ -387,7 +388,7 @@ async function deleteSavedReport(reference) {
     console.error("Unable to delete the saved report.", error);
     savedHistoryStatus.textContent = error.status === 404
       ? "That saved report was not found."
-      : "The report could not be deleted. Check the backend connection and retry.";
+      : "The report could not be deleted right now. Please try again shortly.";
   }
 }
 
@@ -509,7 +510,7 @@ function makeChecklist(matches, text, companyName, companyLink) {
       status: names.has("Request for sensitive information") ? "failed" : "passed",
       detail: names.has("Request for sensitive information")
         ? "A request for credentials or sensitive account information was detected."
-        : "No configured credential-request pattern was detected in the submitted text."
+        : "No credential-sharing warning sign was found in the submitted text."
     }
   ];
 }
@@ -552,7 +553,7 @@ function renderFindings(matches) {
   if (!matches.length) {
     const empty = document.createElement("p");
     empty.className = "no-findings";
-    empty.textContent = "No configured warning-sign patterns matched the submitted text. This is not evidence that the offer is genuine.";
+    empty.textContent = "No recognized warning signs were found in the submitted text. This does not verify the offer or employer.";
     list.appendChild(empty);
   }
 
@@ -610,7 +611,7 @@ function renderReport(analysis) {
   document.getElementById("reportAnalysisStatus").textContent = analysis.analysis_status;
   document.getElementById("reportStorageNote").textContent = analysis.saved_to_account
     ? "This report and its evidence excerpts are saved to your Trāṇam account. The original uploaded file is not stored."
-    : "Generated in your browser. This report was not saved to the backend.";
+    : "Generated in your browser. This report was not saved to your account.";
   document.getElementById("reportScore").textContent = String(analysis.score);
   document.getElementById("reportRiskMeter").setAttribute("aria-valuenow", String(analysis.score));
   document.getElementById("reportRiskMeter").style.setProperty("--score", `${analysis.score}%`);
@@ -639,7 +640,7 @@ function renderReport(analysis) {
   renderChecklist(analysis.checklist);
   document.getElementById("whyFlagged").textContent = analysis.matches.length
     ? `The scanner found ${analysis.warning_count} pattern${analysis.warning_count === 1 ? "" : "s"} or missing-information signal${analysis.warning_count === 1 ? "" : "s"} that may warrant follow-up. These are indicators to review, not a conclusion about the company.`
-    : "No configured warning patterns matched the submitted text. The offer and employer have not been independently checked.";
+    : "No recognized warning signs were found in the submitted text. The offer and employer have not been independently checked.";
   addListItems(document.getElementById("flagExplanationList"), analysis.matches.map((match) => `${match.name}: ${match.why}`));
   addListItems(document.getElementById("reportRecommendations"), analysis.recommendations);
 
@@ -667,15 +668,18 @@ let currentReport = null;
 async function analyzeOffer(text, companyName, companyLink, sourceName) {
   const submitButton = document.getElementById("analyzeBtn");
   const shouldSaveReport = document.getElementById("saveReportConsent").checked;
-  if (shouldSaveReport && !accountAccessToken) {
-    setError("Sign in from the Login link before saving a report to your account.");
+  if (!accountProfile) {
+    setView("check");
     return;
   }
   submitButton.disabled = true;
   submitButton.textContent = "Analyzing…";
 
   try {
-    const headers = { "Content-Type": "application/json" };
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + accountAccessToken
+    };
     if (shouldSaveReport) headers.Authorization = `Bearer ${accountAccessToken}`;
     const response = await fetch(`${API_BASE_URL}/api/analyze`, {
       method: "POST",
@@ -692,7 +696,7 @@ async function analyzeOffer(text, companyName, companyLink, sourceName) {
     if (!response.ok) {
       const detail = typeof payload.detail === "string"
         ? payload.detail
-        : "The backend rejected this analysis request.";
+        : "Trāṇam could not complete this analysis. Please try again.";
       const error = new Error(detail);
       error.status = response.status;
       throw error;
@@ -717,7 +721,7 @@ async function analyzeOffer(text, companyName, companyLink, sourceName) {
       error.status === 401
         ? "Your session expired. Sign in again, then analyze and save the report."
         : error instanceof TypeError
-        ? "Could not connect to the Trāṇam backend. Start the backend and check that the API is available at http://127.0.0.1:8000."
+        ? "Unable to reach Trāṇam right now. Check your connection and try again."
         : error.message
     );
   } finally {
@@ -731,7 +735,7 @@ function getReportSummary() {
 
   const findings = currentReport.matches.length
     ? currentReport.matches.map((match) => `- ${match.severity}: ${match.name}${match.excerpt ? ` — “${match.excerpt}”` : ""}`).join("\n")
-    : "- No configured warning patterns matched the submitted text.";
+    : "- No recognized warning signs were found in the submitted text.";
 
   return [
     "Trāṇam — Internship Verification Report",
@@ -747,7 +751,7 @@ function getReportSummary() {
     "Recommended actions:",
     ...currentReport.recommendations.map((recommendation) => `- ${recommendation}`),
     "",
-    "This rule-based assessment is indicative, not proof or a statistically validated probability. No company, recruiter, website, or document authenticity was independently verified."
+    "This automated assessment is indicative, not proof or a statistically validated probability. No company, recruiter, website, or document authenticity was independently verified."
   ].join("\n");
 }
 
@@ -843,11 +847,19 @@ function updateCharacterCount() {
 }
 
 function setView(viewName, scroll = true) {
-  const knownView = Object.hasOwn(viewTitles, viewName) ? viewName : "home";
+  let knownView = Object.hasOwn(viewTitles, viewName) ? viewName : "home";
+  if (accountRequiredViews.has(knownView) && !accountProfile) {
+    pendingProtectedView = knownView;
+    knownView = "account";
+    if (window.location.hash !== "#account") {
+      window.history.replaceState(null, "", "#account");
+    }
+  }
 
   document.querySelectorAll("[data-view]").forEach((view) => {
     view.hidden = view.dataset.view !== knownView;
   });
+  setupRevealAnimations();
 
   document.querySelectorAll("[data-view-link]").forEach((link) => {
     if (link.dataset.viewLink === knownView) {
@@ -859,20 +871,62 @@ function setView(viewName, scroll = true) {
 
   document.title = viewTitles[knownView];
   if (knownView === "history") renderHistory();
-  if (knownView === "account" && !accountProfile && !accountAccessToken) {
-    showAccountForm("login");
+  if (knownView === "account" && !accountProfile) {
+    showAccountForm(passwordResetToken ? "reset" : "login");
+    if (pendingProtectedView) {
+      setAccountStatus(accountAccessToken
+        ? "Checking your sign-in session…"
+        : "Sign in or create a free account to continue.");
+    }
   }
 
   if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+let revealAnimationsInitialized = false;
+
+function setupRevealAnimations() {
+  if (revealAnimationsInitialized || !("IntersectionObserver" in window)
+    || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  revealAnimationsInitialized = true;
+  const revealObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("is-visible");
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.12, rootMargin: "0px 0px -32px 0px" });
+
+  document.querySelectorAll(
+    ".section-heading, .feature-card, .step-card, .tips-copy, .safety-list, .home-cta, " +
+    ".analyzer-card, .chat-card, .history-card, .safety-panel, .opportunity-card, .account-card"
+  ).forEach((element) => {
+    element.classList.add("reveal");
+    revealObserver.observe(element);
+  });
+}
+
 function syncViewWithHash() {
   const hash = window.location.hash.slice(1);
-  const route = hash === "how-it-works" ? "home" : hash;
+  const [hashRoute, query = ""] = hash.split("?", 2);
+  const route = hashRoute === "how-it-works" ? "home" : hashRoute;
+  passwordResetToken = route === "account"
+    ? new URLSearchParams(query).get("reset_token") || ""
+    : "";
+  if (passwordResetToken) {
+    accountAccessToken = "";
+    sessionStorage.removeItem(ACCOUNT_TOKEN_KEY);
+    accountProfile = null;
+    renderSignedOut();
+  }
   const validView = Object.hasOwn(viewTitles, route) ? route : "home";
   setView(validView, false);
 
-  if (hash === "how-it-works") {
+  if (passwordResetToken) {
+    showAccountForm("reset");
+    setAccountStatus("Choose a new password for your account.");
+  } else if (hashRoute === "how-it-works") {
     requestAnimationFrame(() => {
       document.getElementById("how-it-works").scrollIntoView({ behavior: "smooth" });
     });
@@ -885,6 +939,15 @@ let selectedSourceName = "";
 
 let accountAccessToken = sessionStorage.getItem(ACCOUNT_TOKEN_KEY) || "";
 let accountProfile = null;
+let pendingProtectedView = "";
+let passwordResetToken = "";
+
+function resumePendingView() {
+  if (!pendingProtectedView) return;
+  const view = pendingProtectedView;
+  pendingProtectedView = "";
+  window.location.hash = view;
+}
 
 function setAccountStatus(message, isError = false) {
   const status = document.getElementById("accountStatus");
@@ -894,8 +957,16 @@ function setAccountStatus(message, isError = false) {
 
 function showAccountForm(formName) {
   const isRegister = formName === "register";
-  document.getElementById("loginForm").hidden = isRegister;
-  document.getElementById("registerForm").hidden = !isRegister;
+  const accountForms = {
+    login: "loginForm",
+    register: "registerForm",
+    requestReset: "passwordResetRequestForm",
+    reset: "passwordResetForm"
+  };
+  Object.entries(accountForms).forEach(([name, id]) => {
+    document.getElementById(id).hidden = name !== formName;
+  });
+  document.getElementById("authTabs").hidden = formName === "requestReset" || formName === "reset";
   document.getElementById("loginTab").setAttribute("aria-selected", String(!isRegister));
   document.getElementById("registerTab").setAttribute("aria-selected", String(isRegister));
   setAccountStatus("");
@@ -906,6 +977,9 @@ function renderAccountProfile(profile) {
   document.getElementById("authPanel").hidden = true;
   document.getElementById("profilePanel").hidden = false;
   document.getElementById("accountNavLink").textContent = "Profile";
+  const headerCta = document.getElementById("headerCta");
+  headerCta.href = "#check";
+  headerCta.innerHTML = 'Analyze offer <span aria-hidden="true">↗</span>';
   document.getElementById("profileGreeting").textContent = `Hello, ${profile.display_name}`;
   document.getElementById("profileEmail").textContent = profile.email;
   document.getElementById("profileAvatar").textContent = profile.display_name.trim().charAt(0).toUpperCase() || "T";
@@ -919,8 +993,11 @@ function renderSignedOut() {
   accountProfile = null;
   document.getElementById("authPanel").hidden = false;
   document.getElementById("profilePanel").hidden = true;
-  document.getElementById("accountNavLink").textContent = "Login";
-  showAccountForm("login");
+  document.getElementById("accountNavLink").textContent = "Sign in";
+  const headerCta = document.getElementById("headerCta");
+  headerCta.href = "#account";
+  headerCta.innerHTML = 'Get started <span aria-hidden="true">↗</span>';
+  showAccountForm(passwordResetToken ? "reset" : "login");
 }
 
 async function accountRequest(path, options = {}) {
@@ -952,6 +1029,12 @@ function clearAccountSession(message) {
     console.error("Unable to clear the expired account session from this browser.", error);
   }
   renderSignedOut();
+  const currentView = window.location.hash.slice(1);
+  if (accountRequiredViews.has(currentView)) {
+    pendingProtectedView = currentView;
+    window.history.replaceState(null, "", "#account");
+    setView("account", false);
+  }
   setAccountStatus(message, true);
 }
 
@@ -959,7 +1042,8 @@ function saveAccountSession(payload) {
   accountAccessToken = payload.access_token;
   sessionStorage.setItem(ACCOUNT_TOKEN_KEY, accountAccessToken);
   renderAccountProfile(payload.profile);
-  setAccountStatus("You are signed in. Your profile is saved in this backend.");
+  setAccountStatus("You are signed in. Your profile is saved to your Trāṇam account.");
+  resumePendingView();
 }
 
 async function restoreAccountSession() {
@@ -971,6 +1055,7 @@ async function restoreAccountSession() {
   try {
     const payload = await accountRequest("/api/auth/me");
     renderAccountProfile(payload.profile);
+    resumePendingView();
   } catch (error) {
     console.error("Unable to restore the account session.", error);
     if (error.status === 401) {
@@ -979,13 +1064,77 @@ async function restoreAccountSession() {
       renderSignedOut();
       setAccountStatus("Your session expired. Sign in again.", true);
     } else {
-      setAccountStatus("Could not connect to the account service. Start the backend and retry.", true);
+      setAccountStatus("The account service is unavailable right now. Please try again shortly.", true);
     }
   }
 }
 
 document.getElementById("loginTab").addEventListener("click", () => showAccountForm("login"));
 document.getElementById("registerTab").addEventListener("click", () => showAccountForm("register"));
+document.getElementById("forgotPasswordButton").addEventListener("click", () => {
+  document.getElementById("resetEmail").value = document.getElementById("loginEmail").value;
+  showAccountForm("requestReset");
+});
+document.getElementById("backToSignIn").addEventListener("click", () => showAccountForm("login"));
+
+document.getElementById("passwordResetRequestForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const button = formElement.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setAccountStatus("Sending reset link…");
+  try {
+    const result = await accountRequest("/api/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email: form.get("email") })
+    });
+    setAccountStatus(result.message);
+  } catch (error) {
+    console.error("Password reset email request failed.", error);
+    setAccountStatus(error instanceof TypeError
+      ? "The account service is unavailable right now. Please try again shortly."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("passwordResetForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!passwordResetToken) {
+    setAccountStatus("This reset link is missing or invalid. Request a new one.", true);
+    return;
+  }
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const password = form.get("password");
+  if (password !== form.get("confirm_password")) {
+    setAccountStatus("The passwords do not match. Please try again.", true);
+    return;
+  }
+  const button = formElement.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setAccountStatus("Updating your password…");
+  try {
+    await accountRequest("/api/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token: passwordResetToken, password })
+    });
+    passwordResetToken = "";
+    window.history.replaceState(null, "", "#account");
+    formElement.reset();
+    showAccountForm("login");
+    setAccountStatus("Your password has been updated. Sign in with your new password.");
+  } catch (error) {
+    console.error("Password reset could not be completed.", error);
+    setAccountStatus(error instanceof TypeError
+      ? "The account service is unavailable right now. Please try again shortly."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1006,7 +1155,7 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   } catch (error) {
     console.error("Account sign-in failed.", error);
     setAccountStatus(error instanceof TypeError
-      ? "Could not connect to the account service. Start the backend and try again."
+      ? "The account service is unavailable right now. Please try again shortly."
       : error.message, true);
   } finally {
     button.disabled = false;
@@ -1036,7 +1185,7 @@ document.getElementById("registerForm").addEventListener("submit", async (event)
   } catch (error) {
     console.error("Account registration failed.", error);
     setAccountStatus(error instanceof TypeError
-      ? "Could not connect to the account service. Start the backend and try again."
+      ? "The account service is unavailable right now. Please try again shortly."
       : error.message, true);
   } finally {
     button.disabled = false;
@@ -1064,7 +1213,7 @@ document.getElementById("profilePanel").addEventListener("submit", async (event)
   } catch (error) {
     console.error("Profile update failed.", error);
     setAccountStatus(error instanceof TypeError
-      ? "Could not connect to the account service. Start the backend and try again."
+      ? "The account service is unavailable right now. Please try again shortly."
       : error.message, true);
   } finally {
     button.disabled = false;
@@ -1270,6 +1419,10 @@ offerText.addEventListener("input", () => {
 
 analyzerForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!accountAccessToken) {
+    setView("check");
+    return;
+  }
   errorMessage.hidden = true;
 
   const text = offerText.value.trim();
@@ -1316,6 +1469,10 @@ dropZone.addEventListener("drop", (event) => {
 
 document.getElementById("chatForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!accountProfile) {
+    setView("chat");
+    return;
+  }
 
   const chatInput = document.getElementById("chatInput");
   const message = chatInput.value.trim();
@@ -1336,23 +1493,26 @@ document.getElementById("chatForm").addEventListener("submit", async (event) => 
   try {
     const response = await fetch(`${API_BASE_URL}/api/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `******`
+      },
       body: JSON.stringify({ offer_text: message, source_filename: "Quick chat" })
     });
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(typeof payload.detail === "string" ? payload.detail : "The backend rejected this message.");
+      throw new Error(typeof payload.detail === "string" ? payload.detail : "Trāṇam could not complete this review. Please try again.");
     }
 
     const findings = payload.matches.length
       ? `Patterns to review: ${payload.matches.map((match) => match.name).join(", ")}.`
-      : "No configured warning patterns matched. This does not guarantee that the offer is safe.";
+      : "No recognized warning signs were found. This does not verify that the offer is safe.";
     assistantBubble.textContent = `${payload.classification.label} risk (${payload.score}/100). ${payload.summary}\n\n${findings}\n\n${payload.recommendations[0] || "Verify the employer independently."}`;
     saveHistory("Quick chat", payload.score, payload.classification.key);
   } catch (error) {
     console.error("Quick chat analysis request failed.", error);
     assistantBubble.textContent = error instanceof TypeError
-      ? "Could not connect to the Trāṇam backend. Start the backend and try again."
+      ? "Unable to reach Trāṇam right now. Check your connection and try again."
       : error.message;
   }
   chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1371,5 +1531,5 @@ clearHistoryButton.addEventListener("click", () => {
 window.addEventListener("hashchange", syncViewWithHash);
 document.getElementById("currentYear").textContent = new Date().getFullYear();
 updateCharacterCount();
-setView(window.location.hash.slice(1) || "home", false);
+syncViewWithHash();
 restoreAccountSession();

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import os
 import re
+import smtplib
 import sqlite3
+import ssl
+from email.message import EmailMessage
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -44,6 +48,16 @@ API_HOST = os.getenv("API_HOST", "127.0.0.1").strip()
 API_PORT = _positive_int("API_PORT", 8000)
 MAX_OFFER_CHARACTERS = _positive_int("MAX_OFFER_CHARACTERS", 100_000)
 AUTH_SESSION_HOURS = _positive_int("AUTH_SESSION_HOURS", 24)
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = _positive_int("SMTP_PORT", 587)
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "").strip()
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes"}
+FRONTEND_BASE_URL = os.getenv(
+    "FRONTEND_BASE_URL",
+    "http://127.0.0.1:5500",
+).strip().rstrip("/")
 _database_setting = Path(os.getenv("DATABASE_PATH", "tranam.sqlite3"))
 DATABASE_PATH = (
     _database_setting
@@ -74,6 +88,27 @@ class AccountRequest(BaseModel):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             raise ValueError("Enter a valid email address.")
         return email
+
+
+class EmailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("Enter a valid email address.")
+        return email
+
+
+class PasswordResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=20, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
 
 
 class RegisterRequest(AccountRequest):
@@ -182,7 +217,8 @@ def analyze(
     request: AnalyzeRequest,
     authorization: str | None = Header(default=None),
 ) -> dict:
-    """Analyze submitted text and return a report-ready assessment."""
+    """Analyze submitted text for an authenticated account."""
+    profile = _current_profile(authorization)
     report = analyze_offer(
         offer_text=request.offer_text,
         company_name=request.company_name,
@@ -198,7 +234,6 @@ def analyze(
     report["company_link"] = request.company_link
 
     if request.save_report:
-        profile = _current_profile(authorization)
         report["saved_to_account"] = True
         try:
             ACCOUNT_STORE.save_report(profile["id"], report)
@@ -231,6 +266,82 @@ def _auth_response(profile: dict, token: str) -> dict:
         "expires_in": AUTH_SESSION_HOURS * 60 * 60,
         "profile": profile,
     }
+
+
+def _email_delivery_configured() -> bool:
+    return bool(
+        SMTP_HOST
+        and SMTP_FROM_EMAIL
+        and bool(SMTP_USERNAME) == bool(SMTP_PASSWORD)
+    )
+
+
+def _send_password_reset_email(email: str, token: str) -> None:
+    reset_url = f"{FRONTEND_BASE_URL}/#account?reset_token={quote(token)}"
+    message = EmailMessage()
+    message["Subject"] = "Reset your Trāṇam password"
+    message["From"] = SMTP_FROM_EMAIL
+    message["To"] = email
+    message.set_content(
+        "A password reset was requested for your Trāṇam account.\n\n"
+        f"Use this link within 30 minutes to choose a new password:\n{reset_url}\n\n"
+        "If you did not request this, you can ignore this email."
+    )
+
+    context = ssl.create_default_context()
+    if SMTP_USE_SSL:
+        with smtplib.SMTP_SSL(
+            SMTP_HOST,
+            SMTP_PORT,
+            timeout=15,
+            context=context,
+        ) as server:
+            if SMTP_USERNAME:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(message)
+        return
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+        server.starttls(context=context)
+        if SMTP_USERNAME:
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.send_message(message)
+
+
+@app.post(
+    "/api/auth/password-reset/request",
+    tags=["accounts"],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def request_password_reset(request: EmailRequest) -> dict[str, str]:
+    if not _email_delivery_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email is not configured. Contact the Trāṇam administrator.",
+        )
+    token = ACCOUNT_STORE.create_password_reset_token(request.email)
+    if token is not None:
+        try:
+            _send_password_reset_email(request.email, token)
+        except (OSError, smtplib.SMTPException) as error:
+            ACCOUNT_STORE.delete_password_reset_token(token)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The password reset email could not be sent. Please try again later.",
+            ) from error
+    return {
+        "message": "If an account exists for that email, a password reset link will arrive shortly."
+    }
+
+
+@app.post("/api/auth/password-reset/confirm", tags=["accounts"])
+def confirm_password_reset(request: PasswordResetRequest) -> dict[str, str]:
+    if not ACCOUNT_STORE.complete_password_reset(request.token, request.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This password reset link is invalid or has expired. Request a new one.",
+        )
+    return {"status": "password_updated"}
 
 
 @app.post("/api/auth/register", tags=["accounts"], status_code=status.HTTP_201_CREATED)

@@ -49,11 +49,11 @@ uvicorn main:app --reload
 py -m http.server 5500
 ```
 
-Open `http://127.0.0.1:5500` in a browser. The analyzer and Quick Chat send text to the backend only after the corresponding consent checkbox is selected. Analysis does not persist the full submitted offer text. If a signed-in user separately selects **Save this report to my account**, Trāṇam stores the generated report, including matched evidence excerpts and the optional company details, in the local SQLite database. The original uploaded file is never stored. Saved reports stay with the account until deleted individually; local browser history is separate and can be cleared on the device. PDF extraction and OCR require an internet connection to load the pinned PDF.js/Tesseract.js libraries and English OCR language data. The original selected file stays in the browser; only extracted text is sent to the configured Trāṇam backend after consent.
+Open `http://127.0.0.1:5500` in a browser. Sign in or create a free account before using offer analysis, Quick Chat, verification history, or opportunity search. Selecting **Analyze offer** or **Send** submits the entered text to Trāṇam, as explained beside each action. Analysis does not persist the full submitted offer text. Separately select **Save this report to my Trāṇam account** to store the generated report, matched evidence excerpts, and optional company details in the local SQLite database. The original uploaded file is never stored. Saved reports stay with the account until deleted individually; local browser history is stored on the device. PDF extraction and OCR require an internet connection to load the pinned PDF.js/Tesseract.js libraries and English OCR language data. The original selected file stays in the browser; only extracted text is sent to Trāṇam.
 
 The backend reads local settings from `backend/.env`; safe development defaults are included. Copy `backend/.env.example` to create or reset that file. Account profiles and hashed credentials are stored in `backend/tranam.sqlite3` by default; this local database is ignored by Git. Set `CORS_ORIGINS` to the exact frontend origin(s) when using a different host or port. The API binds to `127.0.0.1` by default.
 
-The account demo uses salted PBKDF2 password hashes and expiring, revocable bearer sessions. It does not yet include email verification, password reset, MFA, account deletion, or production-grade rate limiting; use a unique password and do not expose the local API publicly as-is. Browser history remains local to the device; only reports explicitly saved by a signed-in user are linked to that account.
+The account demo uses salted PBKDF2 password hashes and expiring, revocable bearer sessions. Password recovery sends a one-time reset link by email; configure `SMTP_HOST`, `SMTP_FROM_EMAIL`, and any required SMTP credentials in `backend/.env` before using it. Set `FRONTEND_BASE_URL` to the URL where the website is hosted. Use `SMTP_USE_SSL=true` with an implicit-TLS provider, or leave it `false` to use STARTTLS. Keep SMTP credentials private and never commit them. Email verification, MFA, account deletion, and production-grade rate limiting are not included; use a unique password and do not expose the local API publicly as-is. Browser history remains local to the device; saved reports are linked to the signed-in account only when explicitly selected.
 
 API endpoints:
 
@@ -61,6 +61,8 @@ API endpoints:
 - `POST http://127.0.0.1:8000/api/analyze`
 - `POST http://127.0.0.1:8000/api/auth/register`
 - `POST http://127.0.0.1:8000/api/auth/login`
+- `POST http://127.0.0.1:8000/api/auth/password-reset/request`
+- `POST http://127.0.0.1:8000/api/auth/password-reset/confirm`
 - `GET http://127.0.0.1:8000/api/auth/me`
 - `PATCH http://127.0.0.1:8000/api/auth/profile`
 - `POST http://127.0.0.1:8000/api/auth/logout`
@@ -68,7 +70,7 @@ API endpoints:
 - `DELETE http://127.0.0.1:8000/api/reports/{report_reference}` (authenticated and owner-scoped)
 - Interactive API docs: `http://127.0.0.1:8000/docs`
 
-To persist an analysis, send `save_report: true` in `POST /api/analyze` and include the signed-in user's `Authorization: Bearer <token>` header. Omitting the flag returns an analysis without storing it; requesting persistence without a valid account session is rejected. Report listing and deletion are scoped to the authenticated account. A saved report contains the assessment and its evidence excerpts, not the complete pasted offer or uploaded file. There is no bulk-delete or account-deletion endpoint in this demo yet.
+Every `POST /api/analyze` request requires a valid signed-in account session. To persist an analysis, send `save_report: true`; omitting the flag returns the analysis without storing it. Report listing and deletion are scoped to the authenticated account. A saved report contains the assessment and its evidence excerpts, not the complete pasted offer or uploaded file. There is no bulk-delete or account-deletion endpoint yet.
 
 Run backend unit tests from `backend/` with:
 
@@ -82,16 +84,17 @@ py -m unittest discover -s tests -v
 - Company registration, recruiter identity, websites, email ownership, live URLs, and offer-letter authenticity are not independently verified.
 - OCR recognizes English only and may misread low-quality, rotated, or handwritten text; review extracted text before analysis. Scanned PDFs are limited to 30 pages per file.
 - Old Word `.doc`, Word `.docx`, spreadsheets, video, and other unsupported formats are not accepted. Save/export those as PDF or paste the relevant text.
-- Browser-local history is not synced; account-saved reports are separate and require explicit consent.
+- Verification history is stored in the current browser; saved reports are separate and require an explicit opt-in.
 - Reports saved to an account persist in the local SQLite database until individually deleted. The demo has no account deletion or retention-expiry feature.
 - PDF.js is loaded from jsDelivr; offer documents are not uploaded to the CDN.
 
 ## How to use
 
 1. Start the backend and frontend using the local setup instructions above.
-2. Choose **Check Internship**, then paste offer details or upload a PDF, TXT, MD, or supported image/screenshot. Scanned PDFs and images are OCR-processed in the browser.
-3. Select **Analyze internship** and review the generated report, evidence, checklist statuses, and recommended actions.
-4. Download the print-ready HTML report, print it, or use the browser’s print dialog to save a PDF.
+2. Create a free account or sign in.
+3. Choose **Check Internship**, then paste offer details or upload a PDF, TXT, MD, or supported image/screenshot. Scanned PDFs and images are OCR-processed in the browser.
+4. Select **Analyze offer** and review the generated report, evidence, checklist statuses, and recommended actions.
+5. Download the print-ready HTML report, print it, or use the browser’s print dialog to save a PDF.
 
 Sample text to test a payment warning:
 
@@ -114,7 +117,7 @@ The frontend uses semantic HTML, CSS, and browser JavaScript. The backend uses F
 
 ## Project status
 
-**In development.** The frontend, local FastAPI analysis flow, basic student accounts, and opt-in account report history are functional. Email verification, password recovery, MFA, account deletion, production-grade rate limiting, external company/recruiter verification, and live URL scanning remain future work.
+**In development.** The frontend, local FastAPI analysis flow, basic accounts, opt-in account report history, and SMTP-based password recovery are implemented. Email verification, MFA, account deletion, production-grade rate limiting, external company/recruiter verification, and live URL scanning remain future work.
 
 ## Future scope
 

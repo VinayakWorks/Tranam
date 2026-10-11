@@ -8,7 +8,7 @@
   <title>Trāṇam — Verify Before You Trust</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="script.js" defer></script>
 </head>
@@ -18,7 +18,7 @@
     <div class="header-inner">
       <a class="brand" href="#home" aria-label="Trāṇam home">
         <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5.5c0 4.4-2.9 7.5-7 9.5-4.1-2-7-5.1-7-9.5V6l7-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 6v5.6c0 4.7-3.1 8.1-8 10.5-4.9-2.4-8-5.8-8-10.5V6l8-3.3Z" fill="currentColor"/><path d="M7.8 8.3h8.4M12 8.3v8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
         </span>
         <span class="brand-copy"><strong>Trāṇam</strong><small>Verify before you trust</small></span>
       </a>
@@ -30,11 +30,11 @@
         <a href="#history" data-view-link="history">History</a>
         <a href="#safety" data-view-link="safety">About &amp; Safety</a>
         <a href="#opportunities" data-view-link="opportunities">Find Opportunities</a>
-        <a href="#account" data-view-link="account" id="accountNavLink">Login</a>
+        <a href="#account" data-view-link="account" id="accountNavLink">Sign in</a>
       </nav>
 
-      <a class="button button-green header-cta" href="#check">
-        Analyze now <span aria-hidden="true">↗</span>
+      <a class="button button-green header-cta" href="#account" id="headerCta">
+        Get started <span aria-hidden="true">↗</span>
       </a>
     </div>
   </header>
@@ -43,14 +43,14 @@
     <section class="page-view" id="view-home" data-view="home">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <span class="eyebrow-pill"><span class="eyebrow-dot"></span> Student cybersecurity toolkit</span>
-          <h1 id="hero-title">Is this Internship<br /><span>real or fake?</span></h1>
-          <p class="hero-intro">Get a clearer picture before you apply. Trāṇam scans offer text for common scam patterns and explains the warning signs in plain language.</p>
+          <span class="eyebrow-pill"><span class="eyebrow-dot"></span> INTERNSHIP SAFETY, MADE CLEAR</span>
+          <h1 id="hero-title">Before you say yes,<br /><span>verify the offer.</span></h1>
+          <p class="hero-intro">A clearer way to assess internship offers. Review common recruitment warning signs and understand what may need a closer look.</p>
           <div class="hero-actions">
-            <a class="button button-dark" href="#check">Check an internship <span aria-hidden="true">→</span></a>
+            <a class="button button-dark" href="#check">Review an offer <span aria-hidden="true">→</span></a>
             <a class="button button-outline" href="#how-it-works">How it works</a>
           </div>
-          <p class="hero-footnote"><span aria-hidden="true">✓</span> Free local analysis demo <span class="footnote-separator">·</span> No account required</p>
+          <p class="hero-footnote"><span aria-hidden="true">✓</span> Free offer assessment <span class="footnote-separator">·</span> Free account required</p>
         </div>
         <div class="hero-visual" aria-label="Illustration of an internship offer protected by a shield">
           <div class="visual-glow"></div>
@@ -91,7 +91,7 @@
           <article class="feature-card">
             <span class="feature-icon" aria-hidden="true">◉</span>
             <h3>A clear risk score</h3>
-            <p>Get an estimated score based on the patterns this demo can recognize.</p>
+            <p>Get an estimated score based on common recruitment warning signs.</p>
           </article>
           <article class="feature-card">
             <span class="feature-icon" aria-hidden="true">♡</span>
@@ -115,7 +115,7 @@
             </article>
             <article class="step-card">
               <span class="step-number">02</span><span class="step-icon" aria-hidden="true">⌕</span>
-              <h3>Review detected patterns</h3><p>A rule-based scan checks for common fee, urgency, and information-sharing red flags.</p>
+              <h3>Review detected patterns</h3><p>An automated scan checks for common fee, urgency, and information-sharing warning signs.</p>
             </article>
             <article class="step-card">
               <span class="step-number">03</span><span class="step-icon" aria-hidden="true">✓</span>
@@ -152,7 +152,7 @@
         <div class="section-heading page-heading">
           <span class="eyebrow">INTERNSHIP VERIFICATION</span>
           <h1 id="check-title">Check an internship offer</h1>
-          <p>Share offer text for a rule-based scan of common warning signs. Account storage is optional and requires separate consent.</p>
+          <p>Review an offer for common warning signs and keep your reports together in your Trāṇam account.</p>
         </div>
         <form class="analyzer-card" id="analyzerForm">
           <div class="form-field">
@@ -182,11 +182,10 @@
             <p class="field-hint">Enter at least 20 characters. Please remove personal details before pasting.</p>
           </div>
 
-          <label class="consent-field"><input id="analysisConsent" type="checkbox" required /><span>I agree to send this offer text and optional company details to the configured Trāṇam backend for analysis. Do not include passwords, OTPs, or other sensitive personal information.</span></label>
-          <label class="consent-field save-report-consent"><input id="saveReportConsent" type="checkbox" /><span>Save this report to my signed-in Trāṇam account so I can view or delete it later. Report evidence excerpts and optional company details will be stored; the original uploaded file is not stored.</span></label>
+          <label class="consent-field save-report-consent"><input id="saveReportConsent" type="checkbox" /><span>Save this report to my Trāṇam account. Report findings and entered company details will be stored; the original file will not.</span></label>
+          <p class="privacy-note"><span aria-hidden="true">⌑</span> Selecting Analyze offer sends the offer text and entered company details to Trāṇam for review. Files are processed in your browser; the original file is not uploaded.</p>
           <p id="errorMessage" class="error-message" role="alert" hidden></p>
-          <button class="button button-green analyze-button" id="analyzeBtn" type="submit">Analyze internship <span aria-hidden="true">↗</span></button>
-          <p class="privacy-note"><span aria-hidden="true">⌑</span> Text extraction and image OCR happen in your browser. Only extracted text is sent to the configured backend after you consent and select Analyze; the selected file is not uploaded.</p>
+          <button class="button button-green analyze-button" id="analyzeBtn" type="submit">Analyze offer <span aria-hidden="true">↗</span></button>
 
         </form>
 
@@ -200,9 +199,9 @@
               <span class="report-status"><span class="status-dot"></span> Text analysis complete</span>
               <div class="report-title-row">
                 <div>
-                  <p class="report-kicker">STUDENT INTERNSHIP SAFETY</p>
+                  <p class="report-kicker">INTERNSHIP OFFER SAFETY</p>
                   <h2 id="reportTitle" tabindex="-1">Internship Verification Report</h2>
-                  <p class="report-subtitle">Rule-based review of the information submitted for this assessment.</p>
+                  <p class="report-subtitle">Automated review of the information provided for this assessment.</p>
                 </div>
               </div>
               <dl class="report-meta">
@@ -229,7 +228,7 @@
                 <div><strong id="checksCount">0</strong><span>Text checks performed</span></div>
                 <div><strong id="notCheckedCount">0</strong><span>External checks not performed</span></div>
               </div>
-              <p class="risk-disclaimer">This rule-based score is an indicative estimate—not a statistically validated probability, and not proof that an offer is fraudulent or genuine.</p>
+              <p class="risk-disclaimer">This score is an indicative estimate based on text patterns—not a validated probability or proof that an offer is fraudulent or genuine.</p>
             </section>
 
             <section class="report-section" aria-labelledby="severityTitle">
@@ -281,7 +280,7 @@
             <footer class="report-footer">
               <strong>Trāṇam · Internship Safety Assessment</strong>
               <p>This report is generated from the text provided and the checks listed above. It is informational only and cannot guarantee the legitimacy or fraudulence of an opportunity. Verify details through trusted official channels.</p>
-              <span id="reportStorageNote">Generated in your browser. Reports are not saved to the backend unless you opt in.</span>
+              <span id="reportStorageNote">Generated in your browser. This report was not saved to your account.</span>
             </footer>
           </article>
 
@@ -302,19 +301,19 @@
         <div class="section-heading page-heading">
           <span class="eyebrow">QUICK CHAT</span>
           <h1 id="chat-title">Talk through a red flag</h1>
-          <p>Describe what feels unusual about the offer. This demo assistant will give a quick, rule-based pointer.</p>
+          <p>Share an offer detail that deserves a closer look. The automated assistant will highlight relevant warning signs.</p>
         </div>
         <div class="chat-card">
           <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions">
-            <div class="chat-bubble assistant-bubble">Hi! What does the internship offer ask you to do? Don’t include personal or account details.</div>
+            <div class="chat-bubble assistant-bubble">Welcome to Trāṇam. Share an offer message or detail for review. Please leave out personal and account information.</div>
           </div>
           <form class="chat-form" id="chatForm">
             <label class="visually-hidden" for="chatInput">Describe the internship offer</label>
-            <textarea id="chatInput" rows="2" minlength="20" maxlength="1500" placeholder="e.g. They asked me to pay a fee before the interview…" required></textarea>
+            <textarea id="chatInput" rows="2" minlength="20" maxlength="1500" placeholder="Paste an offer detail or message to review…" required></textarea>
+            <p class="chat-note chat-data-note">Selecting Send shares the message with Trāṇam for an automated review.</p>
             <button class="button button-green" type="submit" aria-label="Send message">Send <span aria-hidden="true">↑</span></button>
-            <label class="chat-consent"><input id="chatConsent" type="checkbox" required /><span>Send this message to the configured backend for a quick scan.</span></label>
           </form>
-          <p class="chat-note">Quick pointers use the Trāṇam backend’s rule-based pattern scan. They aren’t professional or legal advice.</p>
+          <p class="chat-note">Automated guidance is informational only and is not professional or legal advice.</p>
         </div>
       </div>
     </section>
@@ -345,12 +344,12 @@
         <div class="section-heading page-heading">
           <span class="eyebrow">ABOUT TRĀṆAM</span>
           <h1 id="safety-title">A helpful signal, not a verdict</h1>
-          <p>Trāṇam is a student safety project designed to make common recruitment scam patterns easier to spot.</p>
+          <p>Trāṇam helps make common recruitment scam patterns easier to recognize and review.</p>
         </div>
         <div class="safety-content">
           <article class="safety-panel">
-            <h2>What this demo checks</h2>
-            <p>The rule-based scanner looks for text patterns such as fee requests, urgent payment pressure, unrealistic promises, free-email recruiting contacts, suspicious forms, and requests for sensitive information. PDF, TXT, and MD files are processed locally; image screenshots and scanned PDFs use browser-based English OCR. Extracted text is sent to the API only with your consent. The original file is not uploaded, and OCR does not verify authenticity.</p>
+            <h2>What this assessment checks</h2>
+            <p>The automated review looks for patterns such as fee requests, urgent payment pressure, unrealistic promises, free-email recruiting contacts, suspicious forms, and requests for sensitive information. PDF, TXT, and MD files are processed locally; image screenshots and scanned PDFs use browser-based English text recognition. Submitting an offer sends its extracted text and any company details entered to Trāṇam. The original file is not uploaded, and text recognition does not verify authenticity.</p>
             <p>It does not contact companies, validate recruiter identities, inspect websites or live links, or determine whether an offer is genuine. A low score does not guarantee safety, and a warning is not proof of fraud.</p>
           </article>
           <article class="safety-panel">
@@ -372,7 +371,7 @@
     <section class="page-view inner-page" id="view-opportunities" data-view="opportunities" hidden aria-labelledby="opportunities-title">
       <div class="section-wrap opportunities-wrap">
         <div class="section-heading page-heading">
-          <span class="eyebrow">STUDENT CAREER RESOURCES</span>
+          <span class="eyebrow">CAREER OPPORTUNITIES</span>
           <h1 id="opportunities-title">Explore internship opportunities</h1>
           <p>Open internship searches on established job platforms. These links lead to external sites; Trāṇam does not host, verify, or endorse individual listings.</p>
         </div>
@@ -420,28 +419,44 @@
       <div class="section-wrap narrow-wrap">
         <div class="section-heading page-heading">
           <span class="eyebrow">YOUR TRANAM ACCOUNT</span>
-          <h1 id="account-title">Student profile</h1>
-          <p>Create an account to keep a basic student profile available when you sign in again. Passwords are stored as salted hashes by the local backend.</p>
+          <h1 id="account-title">Account &amp; profile</h1>
+          <p>Create an account to save reports and keep career preferences in one place. Passwords are protected using salted hashing.</p>
         </div>
         <div class="account-card">
           <div id="authPanel">
-            <div class="auth-tabs" role="tablist" aria-label="Account access">
+            <div class="auth-tabs" id="authTabs" role="tablist" aria-label="Account access">
               <button class="auth-tab" id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Sign in</button>
               <button class="auth-tab" id="registerTab" type="button" role="tab" aria-selected="false" aria-controls="registerForm">Create account</button>
             </div>
             <form class="account-form" id="loginForm">
               <div class="form-field"><label for="loginEmail">Email address</label><input id="loginEmail" name="email" type="email" autocomplete="email" maxlength="254" required /></div>
               <div class="form-field"><label for="loginPassword">Password</label><input id="loginPassword" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required /><small>Use the password you chose when creating your account.</small></div>
+              <button class="text-link forgot-password-link" id="forgotPasswordButton" type="button">Forgot password?</button>
               <button class="button button-green" type="submit">Sign in</button>
+            </form>
+            <form class="account-form" id="passwordResetRequestForm" hidden>
+              <div class="form-field"><label for="resetEmail">Email address</label><input id="resetEmail" name="email" type="email" autocomplete="email" maxlength="254" required /><small>If an account exists for this address, we’ll send a secure reset link.</small></div>
+              <button class="button button-green" type="submit">Send reset link</button>
+              <button class="text-link forgot-password-link" id="backToSignIn" type="button">Back to sign in</button>
+            </form>
+            <form class="account-form" id="passwordResetForm" hidden>
+              <div class="form-field"><label for="resetPassword">New password</label><input id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /><small>Choose at least 12 characters.</small></div>
+              <div class="form-field"><label for="confirmResetPassword">Confirm new password</label><input id="confirmResetPassword" name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /></div>
+              <button class="button button-green" type="submit">Update password</button>
             </form>
             <form class="account-form" id="registerForm" hidden>
               <div class="form-field"><label for="registerName">Your name</label><input id="registerName" name="display_name" autocomplete="name" maxlength="100" required /></div>
               <div class="form-field"><label for="registerEmail">Email address</label><input id="registerEmail" name="email" type="email" autocomplete="email" maxlength="254" required /></div>
               <div class="form-field"><label for="registerPassword">Password</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /><small>Use at least 12 characters.</small></div>
-              <div class="form-field"><label for="registerCollege">College <span class="optional-label">Optional</span></label><input id="registerCollege" name="college" autocomplete="organization" maxlength="160" /></div>
-              <div class="form-field"><label for="registerCourse">Course or field of study <span class="optional-label">Optional</span></label><input id="registerCourse" name="course" maxlength="120" /></div>
-              <div class="form-field"><label for="registerInterests">Career interests <span class="optional-label">Optional</span></label><textarea id="registerInterests" name="interests" rows="3" maxlength="500" placeholder="e.g. Web development, cybersecurity"></textarea></div>
-              <button class="button button-green" type="submit">Create student account</button>
+              <details class="optional-profile-fields">
+                <summary>Add career preferences <span>(optional)</span></summary>
+                <div class="optional-profile-fields-content">
+                  <div class="form-field"><label for="registerCollege">College</label><input id="registerCollege" name="college" autocomplete="organization" maxlength="160" /></div>
+                  <div class="form-field"><label for="registerCourse">Course or field of study</label><input id="registerCourse" name="course" maxlength="120" /></div>
+                  <div class="form-field"><label for="registerInterests">Career interests</label><textarea id="registerInterests" name="interests" rows="3" maxlength="500" placeholder="e.g. Web development, cybersecurity"></textarea></div>
+                </div>
+              </details>
+              <button class="button button-green" type="submit">Create free account</button>
             </form>
           </div>
           <form class="account-form" id="profilePanel" hidden>
@@ -453,7 +468,7 @@
             <div class="profile-actions"><button class="button button-green" type="submit">Save profile</button><button class="button button-outline" id="logoutButton" type="button">Log out</button></div>
           </form>
           <p class="account-status" id="accountStatus" role="status" aria-live="polite"></p>
-          <p class="account-privacy">Account details are stored in the local SQLite database used by this backend. This demo does not provide email verification, password reset, or multi-factor authentication; use a unique password and do not use a sensitive password from another service.</p>
+          <p class="account-privacy">Account details are stored in Trāṇam’s account database. Use a unique password that is not used for another service.</p>
         </div>
       </div>
     </section>
@@ -462,11 +477,11 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <a class="brand footer-brand" href="#home">
-        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5.5c0 4.4-2.9 7.5-7 9.5-4.1-2-7-5.1-7-9.5V6l7-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 6v5.6c0 4.7-3.1 8.1-8 10.5-4.9-2.4-8-5.8-8-10.5V6l8-3.3Z" fill="currentColor"/><path d="M7.8 8.3h8.4M12 8.3v8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
         <span class="brand-copy"><strong>Trāṇam</strong><small>Verify before you trust</small></span>
       </a>
       <p class="footer-disclaimer">An indicative risk assessment—not a guarantee. Verify opportunities independently.</p>
-      <span class="footer-credit">Made for safer student opportunities · © <span id="currentYear">2026</span> Trāṇam</span>
+      <span class="footer-credit">Supporting safer career decisions · © <span id="currentYear">2026</span> Trāṇam</span>
     </div>
   </footer>
 </body>

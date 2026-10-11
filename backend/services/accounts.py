@@ -82,6 +82,14 @@ class AccountStore:
                 );
                 CREATE INDEX IF NOT EXISTS sessions_expiry_idx
                     ON sessions(expires_at);
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS password_reset_user_created_idx
+                    ON password_reset_tokens(user_id, created_at);
                 CREATE TABLE IF NOT EXISTS reports (
                     report_reference TEXT PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -182,6 +190,86 @@ class AccountStore:
                 raise InvalidCredentialsError
             token = self._new_session(connection, row["id"])
         return self._profile(row), token
+
+    def create_password_reset_token(
+        self,
+        email: str,
+        ttl_minutes: int = 30,
+        cooldown_seconds: int = 60,
+    ) -> str | None:
+        now = datetime.now(timezone.utc)
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        expires_at = (now + timedelta(minutes=ttl_minutes)).isoformat()
+        cooldown_start = (now - timedelta(seconds=cooldown_seconds)).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM password_reset_tokens WHERE expires_at <= ?",
+                (now.isoformat(),),
+            )
+            row = connection.execute(
+                "SELECT id FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
+            if row is None:
+                return None
+            recent_request = connection.execute(
+                """
+                SELECT 1 FROM password_reset_tokens
+                WHERE user_id = ? AND created_at > ?
+                """,
+                (row["id"], cooldown_start),
+            ).fetchone()
+            if recent_request is not None:
+                return None
+            connection.execute(
+                "DELETE FROM password_reset_tokens WHERE user_id = ?",
+                (row["id"],),
+            )
+            connection.execute(
+                """
+                INSERT INTO password_reset_tokens(
+                    token_hash, user_id, expires_at, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (token_hash, row["id"], expires_at, now.isoformat()),
+            )
+        return token
+
+    def complete_password_reset(self, token: str, new_password: str) -> bool:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = datetime.now(timezone.utc).isoformat()
+        salt = secrets.token_bytes(16)
+        password_hash = _hash_password(new_password, salt)
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT user_id FROM password_reset_tokens
+                WHERE token_hash = ? AND expires_at > ?
+                """,
+                (token_hash, now),
+            ).fetchone()
+            if row is None:
+                return False
+            user_id = row["user_id"]
+            connection.execute(
+                "UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?",
+                (salt, password_hash, user_id),
+            )
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            connection.execute(
+                "DELETE FROM password_reset_tokens WHERE user_id = ?",
+                (user_id,),
+            )
+        return True
+
+    def delete_password_reset_token(self, token: str) -> None:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM password_reset_tokens WHERE token_hash = ?",
+                (token_hash,),
+            )
 
     def get_profile(self, token: str) -> dict[str, Any]:
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
